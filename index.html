@@ -27,8 +27,24 @@
           <label>科目<select id="subject"><option value="">すべて</option></select></label>
           <label>校舎<select id="campus"><option value="">すべて</option></select></label>
           <label>区分<select id="section"><option value="">すべて</option></select></label>
-          <label class="wide">優先する先生<select id="preferredTeachers" multiple size="6" aria-label="優先する先生を複数選択"></select><small class="field-help">複数選択できます。iPhoneでは項目をタップして選択してください。</small></label>
         </div>
+        <div class="settings-box" aria-label="スケジュール作成設定">
+          <div class="settings-head">
+            <div>
+              <h2>スケジュール作成設定</h2>
+              <p>検索条件とは分離した、日程自動作成用の固定設定です。講座一覧の絞り込みには使わず、候補から日程を組むときの評価に一貫して反映します。</p>
+            </div>
+          </div>
+          <label class="teacher-setting">優先する先生
+            <select id="preferredTeachers" multiple size="6" aria-label="優先する先生を複数選択"></select>
+            <small class="field-help">複数選択できます。選択内容はブラウザに保存され、検索や絞り込みを変えても維持されます。</small>
+          </label>
+          <div id="preferredTeacherSummary" class="teacher-summary empty">優先講師は未設定です。</div>
+          <div class="settings-actions">
+            <button id="clearTeachersBtn" type="button">優先講師を解除</button>
+          </div>
+        </div>
+
         <div class="options-row">
           <label class="check"><input id="preferUmeda" type="checkbox" checked> 梅田を優先</label>
           <label class="check"><input id="preferVideo" type="checkbox"> 映像も積極的に使う</label>
@@ -47,7 +63,7 @@
             <h2>講座一覧</h2>
             <span id="visibleCount"></span>
           </div>
-          <p class="hint">特訓・講習、その中の教科ごとに折りたたんで表示します。同じ講座名の候補から、自動作成時に最適な組・校舎を選びます。</p>
+          <p class="hint">特訓・講習、その中の教科ごとに折りたたんで表示します。同じ講座名の候補から、自動作成時に最適な組・校舎・講師を選びます。優先講師は上部の設定として固定され、検索条件にはなりません。</p>
           <div id="candidateBox" class="candidate-box empty">「候補」を押した講座がここに入ります。自動作成では、同じ講座名の複数候補から最適な組・校舎・講師を選びます。</div>
           <div id="courseList" class="course-list"></div>
         </div>

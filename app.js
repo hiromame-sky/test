@@ -3,6 +3,7 @@ let wanted = new Set();
 let plan = [];
 const $ = id => document.getElementById(id);
 const state = {q:'', subject:'', campus:'', section:''};
+const SETTINGS_KEY = 'umedaSchedulerSettingsV5';
 
 function uniq(a){return [...new Set(a.filter(Boolean))].sort((x,y)=>String(x).localeCompare(String(y),'ja'))}
 function optFill(id, values){const el=$(id); values.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;el.appendChild(o)})}
@@ -11,12 +12,45 @@ optFill('campus', uniq(courses.map(c=>c.campus)));
 optFill('section', uniq(courses.map(c=>c.section)));
 optFill('preferredTeachers', uniq(courses.map(c=>c.teacher)));
 $('totalCount').textContent = courses.length;
+loadSettings();
+renderTeacherSummary();
 
 ['q','subject','campus','section'].forEach(id=>$(id).addEventListener('input', e=>{state[id]=e.target.value; renderCourses();}));
-$('preferredTeachers').addEventListener('change',()=>{if(plan.length) renderPlan();});
+$('preferredTeachers').addEventListener('change',()=>{saveSettings(); renderTeacherSummary(); renderCourses(); if(plan.length) renderPlan();});
+$('clearTeachersBtn').addEventListener('click',()=>{[...$('preferredTeachers').options].forEach(o=>o.selected=false); saveSettings(); renderTeacherSummary(); renderCourses(); if(plan.length) renderPlan();});
 $('clearBtn').addEventListener('click',()=>{wanted.clear();plan=[];renderAll();});
 $('autoBtn').addEventListener('click', autoSchedule);
 $('exportBtn').addEventListener('click', exportCsv);
+['preferUmeda','preferVideo','compact'].forEach(id=>$(id).addEventListener('change',()=>{saveSettings(); if(plan.length) renderPlan();}));
+
+
+function loadSettings(){
+  try{
+    const saved=JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+    const teacherSet=new Set(saved.preferredTeachers || []);
+    [...$('preferredTeachers').options].forEach(o=>{o.selected=teacherSet.has(o.value);});
+    if(typeof saved.preferUmeda==='boolean') $('preferUmeda').checked=saved.preferUmeda;
+    if(typeof saved.preferVideo==='boolean') $('preferVideo').checked=saved.preferVideo;
+    if(typeof saved.compact==='boolean') $('compact').checked=saved.compact;
+  }catch(e){}
+}
+function saveSettings(){
+  const data={
+    preferredTeachers: preferredTeacherTerms(),
+    preferUmeda: $('preferUmeda').checked,
+    preferVideo: $('preferVideo').checked,
+    compact: $('compact').checked
+  };
+  try{ localStorage.setItem(SETTINGS_KEY, JSON.stringify(data)); }catch(e){}
+}
+function renderTeacherSummary(){
+  const el=$('preferredTeacherSummary');
+  const terms=preferredTeacherTerms();
+  if(!el) return;
+  if(!terms.length){el.className='teacher-summary empty'; el.textContent='優先講師は未設定です。'; return;}
+  el.className='teacher-summary';
+  el.innerHTML=terms.map(t=>`<span>${esc(t)}</span>`).join('');
+}
 
 function normalizeDigits(s){return String(s).replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0)-0xFEE0));}
 function periodNums(text){
@@ -94,8 +128,9 @@ function bucketOrder(name){
 }
 function renderCourseCard(c){
   const isWanted=wanted.has(c.course);
-  const card=document.createElement('article'); card.className='course-card'+(isWanted?' wanted':'');
-  card.innerHTML=`<div class="course-main"><div><div class="course-title">${esc(c.course)}</div><div class="meta"><span class="pill">${esc(c.subject)}</span><span class="pill gray">${esc(c.section)}</span><span class="pill gray">${esc(c.campus)} ${esc(c.group||'')}</span><span class="pill gray">${esc(c.schedule)}</span><span class="pill gray">${esc(c.code)}</span><span class="pill gray">${esc(c.teacher)}</span></div></div><div class="course-actions"><button class="small-btn want">${isWanted?'候補解除':'候補'}</button><button class="small-btn add">追加</button></div></div>`;
+  const isPreferred=teacherPriority(c)>0;
+  const card=document.createElement('article'); card.className='course-card'+(isWanted?' wanted':'')+(isPreferred?' teacher-priority':'');
+  card.innerHTML=`<div class="course-main"><div><div class="course-title">${esc(c.course)}</div><div class="meta"><span class="pill">${esc(c.subject)}</span><span class="pill gray">${esc(c.section)}</span><span class="pill gray">${esc(c.campus)} ${esc(c.group||'')}</span><span class="pill gray">${esc(c.schedule)}</span><span class="pill gray">${esc(c.code)}</span><span class="pill gray">${esc(c.teacher)}</span>${isPreferred?'<span class="pill preferred-pill">優先講師</span>':''}</div></div><div class="course-actions"><button class="small-btn want">${isWanted?'候補解除':'候補'}</button><button class="small-btn add">追加</button></div></div>`;
   card.querySelector('.want').addEventListener('click',()=>{wanted.has(c.course)?wanted.delete(c.course):wanted.add(c.course);renderCourses();renderCandidateBox();});
   card.querySelector('.add').addEventListener('click',()=>{if(!plan.some(x=>x.id===c.id)) plan.push(c);renderPlan();renderTimeline();});
   return card;
