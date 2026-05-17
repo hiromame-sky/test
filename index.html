@@ -12,7 +12,7 @@
       <div>
         <p class="eyebrow">2026年度 梅田校</p>
         <h1>夏期講座スケジューラー</h1>
-        <p class="lead">PDF内の夏期特訓・夏期講習を検索し、受講候補を選ぶだけで、衝突しにくい組み合わせを自動作成します。</p>
+        <p class="lead">PDF内の夏期特訓・夏期講習を検索し、受講候補を選ぶだけで、優先講師や校舎移動条件を踏まえて、おすすめの日程を自動作成します。</p>
       </div>
       <div class="stat-card">
         <span id="totalCount">0</span>
@@ -27,6 +27,7 @@
           <label>科目<select id="subject"><option value="">すべて</option></select></label>
           <label>校舎<select id="campus"><option value="">すべて</option></select></label>
           <label>区分<select id="section"><option value="">すべて</option></select></label>
+          <label class="wide">優先する先生<input id="preferredTeachers" type="text" placeholder="例: 梅木温子, 今村司（複数可）"></label>
         </div>
         <div class="options-row">
           <label class="check"><input id="preferUmeda" type="checkbox" checked> 梅田を優先</label>
@@ -47,6 +48,7 @@
             <span id="visibleCount"></span>
           </div>
           <p class="hint">同じ講座名の候補から、自動作成時に最適な組・校舎を選びます。個別に「追加」も可能です。</p>
+          <div id="candidateBox" class="candidate-box empty">「候補」を押した講座がここに入ります。自動作成では、同じ講座名の複数候補から最適な組・校舎・講師を選びます。</div>
           <div id="courseList" class="course-list"></div>
         </div>
 

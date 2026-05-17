@@ -1,4 +1,4 @@
-const courses = (window.COURSES || []).map((c, i) => ({...c, index:i, slots:parseSlots(c.schedule, c.section)}));
+const courses = (window.COURSES || []).map((c, i) => ({...c, index:i, slots:parseSlots(c.schedule, c.section, c.campus)}));
 let wanted = new Set();
 let plan = [];
 const $ = id => document.getElementById(id);
@@ -12,6 +12,7 @@ optFill('section', uniq(courses.map(c=>c.section)));
 $('totalCount').textContent = courses.length;
 
 ['q','subject','campus','section'].forEach(id=>$(id).addEventListener('input', e=>{state[id]=e.target.value; renderCourses();}));
+$('preferredTeachers').addEventListener('input',()=>{if(plan.length) renderPlan();});
 $('clearBtn').addEventListener('click',()=>{wanted.clear();plan=[];renderAll();});
 $('autoBtn').addEventListener('click', autoSchedule);
 $('exportBtn').addEventListener('click', exportCsv);
@@ -25,9 +26,13 @@ function periodNums(text){
   const ms = [...text.matchAll(/(\d+)\s*限/g)].map(m=>+m[1]);
   return [...new Set(ms)];
 }
-function parseSlots(schedule, section){
+function makeSlot(day, p, campus){
+  const periodLabel = p ? `${p}限` : '時間未指定';
+  return {day, period:periodLabel, periodNo:p || 0, campus:campus || '', key:`${day}-P${p || 0}`};
+}
+function parseSlots(schedule, section, campus){
   const s = normalizeDigits(schedule || '');
-  if(s.includes('視聴開始')) return [{day:'映像講座', period:'自由視聴', key:'VIDEO'}];
+  if(s.includes('視聴開始')) return [{day:'映像講座', period:'自由視聴', periodNo:0, campus:'映像', key:'VIDEO'}];
   const slots=[];
   const parts=s.split(/＆|&/).map(x=>x.trim()).filter(Boolean);
   for(const part of parts){
@@ -35,24 +40,40 @@ function parseSlots(schedule, section){
     const ps=periodNums(part);
     if(term){
       const periods=ps.length?ps:[0];
-      periods.forEach(p=>slots.push({day:`${term[1]}期`, period:p?`${p}限`:'時間未指定', key:`T${term[1]}-P${p}`}));
+      periods.forEach(p=>slots.push(makeSlot(`${term[1]}期`, p, campus)));
       continue;
     }
     const range=part.match(/(\d{1,2})\/(\d{1,2})\([^)]*\)\s*[～~]\s*(\d{1,2})\/(\d{1,2})/);
     if(range){
       const start=+range[2], end=+range[4], month=+range[1];
-      for(let d=start; d<=end; d++) slots.push({day:`${month}/${d}`, period:'全日', key:`D${month}/${d}-ALL`});
+      for(let d=start; d<=end; d++) slots.push({day:`${month}/${d}`, period:'全日', periodNo:99, campus:campus || '', key:`${month}/${d}-ALL`});
       continue;
     }
     const dates=[...part.matchAll(/(\d{1,2})\/(\d{1,2})/g)].map(m=>`${+m[1]}/${+m[2]}`);
     if(dates.length){
       const ps2=ps.length?ps:[0];
-      dates.forEach(d=>ps2.forEach(p=>slots.push({day:d, period:p?`${p}限`:'時間未指定', key:`D${d}-P${p}`})));
+      dates.forEach(d=>ps2.forEach(p=>slots.push(makeSlot(d, p, campus))));
       continue;
     }
-    slots.push({day:s, period:'時間未指定', key:`RAW-${s}`});
+    slots.push({day:s, period:'時間未指定', periodNo:0, campus:campus || '', key:`RAW-${s}`});
   }
   return slots;
+}
+function preferredTeacherTerms(){
+  return normalizeDigits($('preferredTeachers').value || '').split(/[、,\s]+/).map(x=>x.trim()).filter(Boolean);
+}
+function teacherPriority(c){
+  const terms=preferredTeacherTerms();
+  if(!terms.length) return 0;
+  const teacher=normalizeDigits(c.teacher || '').replace(/\s+/g,'');
+  let best=0;
+  for(const raw of terms){
+    const t=normalizeDigits(raw).replace(/\s+/g,'');
+    if(!t) continue;
+    if(teacher === t) best=Math.max(best, 70);
+    else if(teacher.includes(t) || t.includes(teacher)) best=Math.max(best, 55);
+  }
+  return best;
 }
 function filteredCourses(){
   const q=state.q.trim().toLowerCase();
@@ -62,20 +83,46 @@ function renderCourses(){
   const list=$('courseList'); list.innerHTML='';
   const arr=filteredCourses(); $('visibleCount').textContent=`${arr.length}件`;
   arr.forEach(c=>{
-    const card=document.createElement('article'); card.className='course-card'+(wanted.has(c.course)?' wanted':'');
-    card.innerHTML=`<div class="course-main"><div><div class="course-title">${esc(c.course)}</div><div class="meta"><span class="pill">${esc(c.subject)}</span><span class="pill gray">${esc(c.section)}</span><span class="pill gray">${esc(c.campus)} ${esc(c.group||'')}</span><span class="pill gray">${esc(c.schedule)}</span><span class="pill gray">${esc(c.code)}</span><span class="pill gray">${esc(c.teacher)}</span></div></div><div class="course-actions"><button class="small-btn want">候補</button><button class="small-btn add">追加</button></div></div>`;
-    card.querySelector('.want').addEventListener('click',()=>{wanted.has(c.course)?wanted.delete(c.course):wanted.add(c.course);renderCourses();});
+    const isWanted=wanted.has(c.course);
+    const card=document.createElement('article'); card.className='course-card'+(isWanted?' wanted':'');
+    card.innerHTML=`<div class="course-main"><div><div class="course-title">${esc(c.course)}</div><div class="meta"><span class="pill">${esc(c.subject)}</span><span class="pill gray">${esc(c.section)}</span><span class="pill gray">${esc(c.campus)} ${esc(c.group||'')}</span><span class="pill gray">${esc(c.schedule)}</span><span class="pill gray">${esc(c.code)}</span><span class="pill gray">${esc(c.teacher)}</span></div></div><div class="course-actions"><button class="small-btn want">${isWanted?'候補解除':'候補'}</button><button class="small-btn add">追加</button></div></div>`;
+    card.querySelector('.want').addEventListener('click',()=>{wanted.has(c.course)?wanted.delete(c.course):wanted.add(c.course);renderCourses();renderCandidateBox();});
     card.querySelector('.add').addEventListener('click',()=>{if(!plan.some(x=>x.id===c.id)) plan.push(c);renderPlan();renderTimeline();});
     list.appendChild(card);
   });
 }
-function conflictsFor(items){
-  const used=new Map(), warnings=[];
-  items.forEach(c=>c.slots.filter(s=>s.key!=='VIDEO').forEach(s=>{
-    const k=s.key; if(!used.has(k)) used.set(k,[]); used.get(k).push(c);
-  }));
-  used.forEach((v,k)=>{ if(v.length>1) warnings.push({key:k, items:v}); });
-  return warnings;
+function realSlots(c){return c.slots.filter(s=>s.key!=='VIDEO');}
+function slotOverlaps(a,b){
+  if(a.day!==b.day) return false;
+  if(a.periodNo===99 || b.periodNo===99) return true;
+  if(!a.periodNo || !b.periodNo) return false;
+  return a.periodNo===b.periodNo;
+}
+function campusMoveProblem(a,b){
+  if(a.day!==b.day) return false;
+  if(!a.periodNo || !b.periodNo || a.periodNo===99 || b.periodNo===99) return false;
+  if(!a.campus || !b.campus || a.campus===b.campus) return false;
+  const diff=Math.abs(a.periodNo-b.periodNo);
+  if(diff!==1) return false;
+  const pair=[a.periodNo,b.periodNo].sort((x,y)=>x-y).join('-');
+  return pair !== '2-3';
+}
+function issuesFor(items){
+  const issues=[];
+  for(let i=0;i<items.length;i++){
+    for(let j=i+1;j<items.length;j++){
+      const a=items[i], b=items[j];
+      for(const sa of realSlots(a)) for(const sb of realSlots(b)){
+        if(slotOverlaps(sa,sb)) issues.push({type:'conflict', day:sa.day, period:sa.periodNo===99?'全日':sa.period, items:[a,b]});
+        else if(campusMoveProblem(sa,sb)) issues.push({type:'move', day:sa.day, period:`${Math.min(sa.periodNo,sb.periodNo)}限→${Math.max(sa.periodNo,sb.periodNo)}限`, items:[a,b], campuses:[sa.campus,sb.campus]});
+      }
+    }
+  }
+  return issues;
+}
+function conflictCount(items){return issuesFor(items).filter(x=>x.type==='conflict').length;}
+function issuePenalty(items){
+  return issuesFor(items).reduce((n,x)=>n+(x.type==='conflict'?100000:25000),0);
 }
 function scoreCourse(c, chosen){
   let score=0;
@@ -83,46 +130,83 @@ function scoreCourse(c, chosen){
   if($('preferUmeda').checked && c.campus!=='梅田' && c.campus!=='映像') score-=8;
   if($('preferVideo').checked && c.campus==='映像') score+=12;
   if(!$('preferVideo').checked && c.campus==='映像') score-=3;
-  const nonVideo=c.slots.filter(s=>s.key!=='VIDEO');
-  const existingDays=new Set(chosen.flatMap(x=>x.slots.map(s=>s.day)));
-  const newDays=nonVideo.filter(s=>!existingDays.has(s.day)).length;
+  score += teacherPriority(c);
+  const nonVideo=realSlots(c);
+  const existingDays=new Set(chosen.flatMap(x=>realSlots(x).map(s=>s.day)));
+  const newDays=[...new Set(nonVideo.map(s=>s.day))].filter(d=>!existingDays.has(d)).length;
   if($('compact').checked) score-=newDays*2;
   score-=nonVideo.length*0.1;
   return score;
 }
+function stateScore(items){
+  let score=items.length*1000 - issuePenalty(items);
+  items.forEach((c,i)=> score+=scoreCourse(c, items.slice(0,i)));
+  const days=new Set(items.flatMap(x=>realSlots(x).map(s=>s.day)));
+  if($('compact').checked) score-=days.size*4;
+  return score;
+}
 function autoSchedule(){
   const names=[...wanted];
-  const selected=[];
-  const conflicts=[];
-  for(const name of names){
-    const opts=courses.filter(c=>c.course===name);
-    const ok=opts.filter(o=>conflictsFor([...selected,o]).length===0);
-    const pool=ok.length?ok:opts;
-    pool.sort((a,b)=>scoreCourse(b,selected)-scoreCourse(a,selected));
-    if(pool[0]){
-      selected.push(pool[0]);
-      if(!ok.length) conflicts.push(name);
+  if(!names.length){ plan=[]; renderPlan(['候補が選択されていません。']); renderTimeline(); return; }
+  const groups=names.map(name=>({name, opts:courses.filter(c=>c.course===name)})).filter(g=>g.opts.length);
+  let states=[{items:[], score:0}];
+  const beamSize=180;
+  for(const group of groups){
+    const next=[];
+    for(const st of states){
+      const sorted=[...group.opts].sort((a,b)=>scoreCourse(b,st.items)-scoreCourse(a,st.items));
+      for(const opt of sorted){
+        const items=[...st.items,opt];
+        next.push({items, score:stateScore(items)});
+      }
     }
+    next.sort((a,b)=>b.score-a.score);
+    states=dedupeStates(next).slice(0,beamSize);
   }
-  plan=selected;
-  renderPlan(conflicts);
+  const best=states.sort((a,b)=>b.score-a.score)[0];
+  plan=best ? best.items : [];
+  renderPlan();
   renderTimeline();
 }
-function renderPlan(forced=[]){
+function dedupeStates(states){
+  const seen=new Set(), out=[];
+  for(const st of states){
+    const k=st.items.map(x=>x.id).join('|');
+    if(seen.has(k)) continue;
+    seen.add(k); out.push(st);
+  }
+  return out;
+}
+function renderCandidateBox(){
+  const el=$('candidateBox');
+  const names=[...wanted].sort((a,b)=>a.localeCompare(b,'ja'));
+  if(!names.length){el.className='candidate-box empty';el.textContent='「候補」を押した講座がここに入ります。自動作成では、同じ講座名の複数候補から最適な組・校舎・講師を選びます。';return;}
+  el.className='candidate-box';
+  el.innerHTML=names.map(n=>`<span>${esc(n)} <button class="x" data-name="${escAttr(n)}">×</button></span>`).join('');
+  el.querySelectorAll('.x').forEach(btn=>btn.addEventListener('click',()=>{wanted.delete(btn.dataset.name);renderCandidateBox();renderCourses();}));
+}
+function renderPlan(extraWarnings=[]){
   const list=$('planList'), warns=$('warnings'), summary=$('summary'); list.innerHTML=''; warns.innerHTML=''; summary.innerHTML='';
-  const conf=conflictsFor(plan);
-  if(forced.length) warns.innerHTML += `<div class="warn">一部の候補は衝突なしで組めませんでした: ${forced.map(esc).join('、')}</div>`;
-  conf.forEach(w=>warns.innerHTML += `<div class="warn">${esc(w.key)} で重複: ${w.items.map(x=>esc(x.course+' '+x.code)).join(' / ')}</div>`);
-  const days=new Set(plan.flatMap(c=>c.slots.filter(s=>s.key!=='VIDEO').map(s=>s.day)));
+  extraWarnings.forEach(w=>warns.innerHTML += `<div class="warn">${esc(w)}</div>`);
+  const issues=issuesFor(plan);
+  issues.forEach(w=>{
+    const msg = w.type==='conflict'
+      ? `${esc(w.day)} ${esc(w.period)}で重複: ${w.items.map(x=>esc(x.course+' '+x.code)).join(' / ')}`
+      : `${esc(w.day)} ${esc(w.period)}の校舎移動が厳しい可能性: ${w.items.map(x=>esc(x.course+' '+x.campus)).join(' / ')}。2限と3限の間の校舎移動のみ可能として判定しています。`;
+    warns.innerHTML += `<div class="warn">${msg}</div>`;
+  });
+  if(plan.length && !issues.length) warns.innerHTML = `<div class="ok">重複なし。校舎移動は「2限と3限の間のみ可能」として判定済みです。</div>`;
+  const days=new Set(plan.flatMap(c=>realSlots(c).map(s=>s.day)));
   const units=plan.reduce((a,c)=>a+(parseFloat(c.unit)||0),0);
-  summary.innerHTML=`<div><b>${plan.length}</b><span>選択講座</span></div><div><b>${days.size}</b><span>通学日・期</span></div><div><b>${units || '-'}</b><span>単位合計</span></div>`;
+  const preferred=plan.filter(c=>teacherPriority(c)>0).length;
+  summary.innerHTML=`<div><b>${plan.length}</b><span>選択講座</span></div><div><b>${days.size}</b><span>通学日・期</span></div><div><b>${units || '-'}</b><span>単位合計</span></div><div><b>${preferred}</b><span>優先講師一致</span></div>`;
   $('planCount').textContent=`${plan.length}件`;
   if(!plan.length){list.className='plan-list empty';list.textContent='まだ講座が追加されていません。';return;}
   list.className='plan-list';
   plan.forEach(c=>{
-    const has=conf.some(w=>w.items.includes(c));
-    const item=document.createElement('article'); item.className='plan-item'+(has?' conflict':'');
-    item.innerHTML=`<div class="plan-title">${esc(c.course)}</div><div class="plan-sub">${esc(c.subject)} / ${esc(c.section)} / ${esc(c.campus)} ${esc(c.group||'')} / ${esc(c.schedule)}<br>${esc(c.code)} / ${esc(c.teacher)}</div><button class="small-btn remove">削除</button>`;
+    const has=issues.some(w=>w.items.includes(c));
+    const item=document.createElement('article'); item.className='plan-item'+(has?' conflict':'')+(teacherPriority(c)>0?' preferred':'');
+    item.innerHTML=`<div class="plan-title">${esc(c.course)}</div><div class="plan-sub">${esc(c.subject)} / ${esc(c.section)} / ${esc(c.campus)} ${esc(c.group||'')} / ${esc(c.schedule)}<br>${esc(c.code)} / ${esc(c.teacher)}${teacherPriority(c)>0?' / 優先講師':''}</div><button class="small-btn remove">削除</button>`;
     item.querySelector('button').addEventListener('click',()=>{plan=plan.filter(x=>x.id!==c.id);renderPlan();renderTimeline();});
     list.appendChild(item);
   });
@@ -136,12 +220,13 @@ function renderTimeline(){
   const keys=[...map.keys()].sort(naturalDaySort);
   keys.forEach(day=>{
     const block=document.createElement('div'); block.className='day-block'; block.innerHTML=`<h3>${esc(day)}</h3>`;
-    map.get(day).sort((a,b)=>String(a.slot.period).localeCompare(String(b.slot.period),'ja')).forEach(x=>{
+    map.get(day).sort((a,b)=>periodSortValue(a.slot)-periodSortValue(b.slot)).forEach(x=>{
       const div=document.createElement('div'); div.className='slot'; div.innerHTML=`<div class="slot-time">${esc(x.slot.period)}</div><div><b>${esc(x.course.course)}</b><br><span class="plan-sub">${esc(x.course.campus)} ${esc(x.course.group||'')} / ${esc(x.course.code)} / ${esc(x.course.teacher)}</span></div>`; block.appendChild(div);
     });
     el.appendChild(block);
   });
 }
+function periodSortValue(s){return s.periodNo===99?99:(s.periodNo||0);}
 function naturalDaySort(a,b){
   const av=a.match(/(\d+)期/), bv=b.match(/(\d+)期/); if(av&&bv) return +av[1]-+bv[1]; if(av) return -1; if(bv) return 1;
   const ad=a.match(/(\d+)\/(\d+)/), bd=b.match(/(\d+)\/(\d+)/); if(ad&&bd) return (+ad[1]*40+ +ad[2])-(+bd[1]*40+ +bd[2]); if(ad) return -1; if(bd) return 1;
@@ -155,5 +240,6 @@ function exportCsv(){
   const blob=new Blob(['\ufeff'+csv],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='umeda-schedule-plan.csv'; a.click(); URL.revokeObjectURL(a.href);
 }
 function esc(s){return String(s??'').replace(/[&<>"]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
-function renderAll(){renderCourses();renderPlan();renderTimeline();}
+function escAttr(s){return esc(s).replace(/'/g,'&#39;');}
+function renderAll(){renderCourses();renderCandidateBox();renderPlan();renderTimeline();}
 renderAll();
