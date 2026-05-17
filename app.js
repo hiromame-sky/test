@@ -12,6 +12,8 @@ function normalizeDigits(s){return String(s || '').replace(/[０-９]/g, ch => S
 function normalizeName(s){return normalizeDigits(s).replace(/\s+/g,'').trim();}
 function esc(s){return String(s??'').replace(/[&<>"]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
 function escAttr(s){return esc(s).replace(/'/g,'&#39;');}
+function courseName(c){return String(c?.displayCourse || c?.course || c?.name || c?.title || c?.['講座名'] || '').trim();}
+function groupKeyFor(c){return [sectionBucket(c.section), c.subject || '未分類', courseName(c)].join('__');}
 
 const courseGroups = buildCourseGroups(courses);
 optFill('subject', uniq(courses.map(c=>c.subject)));
@@ -34,8 +36,12 @@ $('exportBtn').addEventListener('click', exportCsv);
 function buildCourseGroups(items){
   const map=new Map();
   for(const c of items){
-    const key=c.course;
-    if(!map.has(key)) map.set(key,{name:key, subject:c.subject, sections:new Set(), campuses:new Set(), teachers:new Set(), options:[]});
+    const name=courseName(c);
+    if(!name) continue;
+    c.displayCourse=name;
+    const key=groupKeyFor(c);
+    c.courseGroupId=key;
+    if(!map.has(key)) map.set(key,{id:key,name, subject:c.subject || '未分類', sections:new Set(), campuses:new Set(), teachers:new Set(), options:[]});
     const g=map.get(key);
     g.sections.add(sectionBucket(c.section));
     g.campuses.add(c.campus);
@@ -48,8 +54,9 @@ function buildCourseGroups(items){
     campuses:[...g.campuses],
     teachers:[...g.teachers],
     optionCount:g.options.length
-  })).sort((a,b)=>a.subject.localeCompare(b.subject,'ja') || a.name.localeCompare(b.name,'ja'));
+  })).sort((a,b)=>bucketOrder(a.sections[0])-bucketOrder(b.sections[0]) || a.subject.localeCompare(b.subject,'ja') || a.name.localeCompare(b.name,'ja'));
 }
+
 
 function renderTeacherPicker(){
   const box=$('teacherCheckboxList');
@@ -102,7 +109,7 @@ function sectionBucket(section){
 function bucketOrder(name){if(name==='夏期特訓') return 1; if(name==='夏期講習') return 2; return 9;}
 function filteredGroups(){
   const q=state.q.trim().toLowerCase();
-  return courseGroups.filter(g=>(!q || [g.name,g.subject,...g.sections].join(' ').toLowerCase().includes(q)) && (!state.subject || g.subject===state.subject) && (!state.section || g.sections.includes(state.section)));
+  return courseGroups.filter(g=>(!q || [g.name,g.subject,...g.sections,...g.campuses,...g.teachers].join(' ').toLowerCase().includes(q)) && (!state.subject || g.subject===state.subject) && (!state.section || g.sections.includes(state.section)));
 }
 function groupHasPreferredTeacher(g){return g.options.some(o=>teacherPriority(o)>0);}
 function renderCourseNames(){
@@ -123,7 +130,7 @@ function renderCourseNames(){
     bucketDetails.innerHTML=`<summary><span class="summary-title">${esc(bucket)}</span><span class="summary-count">${total}件</span></summary>`;
     const subjectWrap=document.createElement('div'); subjectWrap.className='subject-wrap';
     [...subjectMap.entries()].sort((a,b)=>a[0].localeCompare(b[0],'ja')).forEach(([subject, items])=>{
-      const details=document.createElement('details'); details.className='accordion subject-accordion'; details.open=items.length<=20 || bucketIndex===0;
+      const details=document.createElement('details'); details.className='accordion subject-accordion'; details.open=true;
       details.innerHTML=`<summary><span class="summary-title">${esc(subject)}</span><span class="summary-count">${items.length}件</span></summary>`;
       const inner=document.createElement('div'); inner.className='subject-course-list';
       items.sort((a,b)=>a.name.localeCompare(b.name,'ja')).forEach(g=>inner.appendChild(renderGroupCard(g)));
@@ -133,7 +140,7 @@ function renderCourseNames(){
   });
 }
 function renderGroupCard(g){
-  const isWanted=wanted.has(g.name);
+  const isWanted=wanted.has(g.id);
   const preferred=groupHasPreferredTeacher(g);
   const card=document.createElement('article'); card.className='course-card'+(isWanted?' wanted':'')+(preferred?' teacher-priority':'');
   const settingsTags=[];
@@ -155,18 +162,19 @@ function renderGroupCard(g){
       <div class="course-actions"><button class="small-btn want">${isWanted?'候補から外す':'候補に入れる'}</button></div>
     </div>
     <details class="variant-details"><summary>組・校舎・講師候補を見る</summary><div class="variant-list">${renderVariantRows(g.options)}</div></details>`;
-  card.querySelector('.want').addEventListener('click',()=>{wanted.has(g.name)?wanted.delete(g.name):wanted.add(g.name); renderCourseNames(); renderCandidateBox();});
+  card.querySelector('.want').addEventListener('click',()=>{wanted.has(g.id)?wanted.delete(g.id):wanted.add(g.id); renderCourseNames(); renderCandidateBox();});
   return card;
 }
 function renderVariantRows(opts){
   return opts.map(c=>`<div class="variant-row"><b>${esc(c.campus)} ${esc(c.group||'')}</b><span>${esc(c.schedule)}</span><span>${esc(c.code)}</span><span>${esc(c.teacher)}</span></div>`).join('');
 }
 function renderCandidateBox(){
-  const el=$('candidateBox'); const names=[...wanted].sort((a,b)=>a.localeCompare(b,'ja'));
-  if(!names.length){el.className='candidate-box empty'; el.textContent='「候補に入れる」を押した講座名がここに入ります。'; return;}
+  const el=$('candidateBox'); const ids=[...wanted];
+  if(!ids.length){el.className='candidate-box empty'; el.textContent='「候補に入れる」を押した講座名がここに入ります。'; return;}
+  const groups=ids.map(id=>courseGroups.find(g=>g.id===id)).filter(Boolean).sort((a,b)=>a.name.localeCompare(b.name,'ja'));
   el.className='candidate-box';
-  el.innerHTML=names.map(n=>`<span>${esc(n)} <button class="x" data-name="${escAttr(n)}">×</button></span>`).join('');
-  el.querySelectorAll('.x').forEach(btn=>btn.addEventListener('click',()=>{wanted.delete(btn.dataset.name); renderCandidateBox(); renderCourseNames();}));
+  el.innerHTML=groups.map(g=>`<span>${esc(g.name)} <small>${esc(g.subject)}・${esc(g.sections.join(' / '))}</small> <button class="x" data-id="${escAttr(g.id)}">×</button></span>`).join('');
+  el.querySelectorAll('.x').forEach(btn=>btn.addEventListener('click',()=>{wanted.delete(btn.dataset.id); renderCandidateBox(); renderCourseNames();}));
 }
 
 function periodNums(text){
@@ -247,9 +255,9 @@ function stateScore(items){
   return score;
 }
 function autoSchedule(){
-  const names=[...wanted];
-  if(!names.length){plan=[]; renderPlan(['講座名候補が選択されていません。']); renderTimeline(); return;}
-  const groups=names.map(name=>({name, opts:courses.filter(c=>c.course===name)})).filter(g=>g.opts.length);
+  const ids=[...wanted];
+  if(!ids.length){plan=[]; renderPlan(['講座名候補が選択されていません。']); renderTimeline(); return;}
+  const groups=ids.map(id=>courseGroups.find(g=>g.id===id)).filter(Boolean).map(g=>({name:g.name, opts:g.options}));
   let states=[{items:[], score:0}]; const beamSize=240;
   for(const group of groups){
     const next=[];
@@ -273,8 +281,8 @@ function renderPlan(extraWarnings=[]){
   const issues=issuesFor(plan);
   issues.forEach(w=>{
     const msg=w.type==='conflict'
-      ? `${esc(w.day)} ${esc(w.period)}で重複: ${w.items.map(x=>esc(x.course+' '+x.code)).join(' / ')}`
-      : `${esc(w.day)} ${esc(w.period)}の校舎移動が不可: ${w.items.map(x=>esc(x.course+' '+x.campus)).join(' / ')}。2限と3限の間のみ移動可能として判定しています。`;
+      ? `${esc(w.day)} ${esc(w.period)}で重複: ${w.items.map(x=>esc(courseName(x)+' '+x.code)).join(' / ')}`
+      : `${esc(w.day)} ${esc(w.period)}の校舎移動が不可: ${w.items.map(x=>esc(courseName(x)+' '+x.campus)).join(' / ')}。2限と3限の間のみ移動可能として判定しています。`;
     warns.innerHTML+=`<div class="warn">${msg}</div>`;
   });
   if(plan.length && !issues.length) warns.innerHTML=`<div class="ok">重複なし。校舎移動は「2限と3限の間のみ可能」として判定済みです。</div>`;
@@ -289,8 +297,8 @@ function renderPlan(extraWarnings=[]){
   plan.forEach(c=>{
     const has=issues.some(w=>w.items.includes(c));
     const item=document.createElement('article'); item.className='plan-item'+(has?' conflict':'')+(teacherPriority(c)>0?' preferred':'');
-    item.innerHTML=`<div class="plan-title">${esc(c.course)}</div><div class="plan-sub">${esc(c.subject)} / ${esc(c.section)} / ${esc(c.campus)} ${esc(c.group||'')} / ${esc(c.schedule)}<br>${esc(c.code)} / ${esc(c.teacher)}${teacherPriority(c)>0?' / 優先講師一致':''}${preferredCampuses().includes(c.campus)?' / 優先校舎一致':''}</div><button class="small-btn remove">この講座を外す</button>`;
-    item.querySelector('button').addEventListener('click',()=>{wanted.delete(c.course); plan=plan.filter(x=>x.id!==c.id); renderCandidateBox(); renderCourseNames(); renderPlan(); renderTimeline();});
+    item.innerHTML=`<div class="plan-title">${esc(courseName(c))}</div><div class="plan-sub">${esc(c.subject)} / ${esc(c.section)} / ${esc(c.campus)} ${esc(c.group||'')} / ${esc(c.schedule)}<br>${esc(c.code)} / ${esc(c.teacher)}${teacherPriority(c)>0?' / 優先講師一致':''}${preferredCampuses().includes(c.campus)?' / 優先校舎一致':''}</div><button class="small-btn remove">この講座を外す</button>`;
+    item.querySelector('button').addEventListener('click',()=>{wanted.delete(c.courseGroupId); plan=plan.filter(x=>x.id!==c.id); renderCandidateBox(); renderCourseNames(); renderPlan(); renderTimeline();});
     list.appendChild(item);
   });
 }
@@ -302,7 +310,7 @@ function renderTimeline(){
   [...map.keys()].sort(naturalDaySort).forEach(day=>{
     const block=document.createElement('div'); block.className='day-block'; block.innerHTML=`<h3>${esc(day)}</h3>`;
     map.get(day).sort((a,b)=>periodSortValue(a.slot)-periodSortValue(b.slot)).forEach(x=>{
-      const div=document.createElement('div'); div.className='slot'; div.innerHTML=`<div class="slot-time">${esc(x.slot.period)}</div><div><b>${esc(x.course.course)}</b><br><span class="plan-sub">${esc(x.course.campus)} ${esc(x.course.group||'')} / ${esc(x.course.code)} / ${esc(x.course.teacher)}</span></div>`; block.appendChild(div);
+      const div=document.createElement('div'); div.className='slot'; div.innerHTML=`<div class="slot-time">${esc(x.slot.period)}</div><div><b>${esc(courseName(x.course))}</b><br><span class="plan-sub">${esc(x.course.campus)} ${esc(x.course.group||'')} / ${esc(x.course.code)} / ${esc(x.course.teacher)}</span></div>`; block.appendChild(div);
     });
     el.appendChild(block);
   });
@@ -316,7 +324,7 @@ function naturalDaySort(a,b){
 function exportCsv(){
   if(!plan.length) return;
   const head=['区分','科目','講座名','校舎','組','日程','講座番号','講師名','単位'];
-  const body=plan.map(c=>[c.section,c.subject,c.course,c.campus,c.group,c.schedule,c.code,c.teacher,c.unit]);
+  const body=plan.map(c=>[c.section,c.subject,courseName(c),c.campus,c.group,c.schedule,c.code,c.teacher,c.unit]);
   const csv=[head,...body].map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\n');
   const blob=new Blob(['\ufeff'+csv],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='umeda-schedule-plan.csv'; a.click(); URL.revokeObjectURL(a.href);
 }
