@@ -12,47 +12,60 @@
       <div>
         <p class="eyebrow">2026年度 梅田校</p>
         <h1>夏期講座スケジューラー</h1>
-        <p class="lead">PDF内の夏期特訓・夏期講習を、区分と教科ごとに折りたたんで整理。受講候補を選ぶだけで、優先講師や校舎移動条件を踏まえて、おすすめの日程を自動作成します。</p>
+        <p class="lead">講座名だけを受講候補に入れ、組・校舎・講師・日程は共通設定をもとに自動選択します。最初に校舎や組を決めず、重複しない予定を組みやすくするためのサイトです。</p>
       </div>
       <div class="stat-card">
         <span id="totalCount">0</span>
-        <small>講座データ</small>
+        <small>講座候補</small>
       </div>
     </header>
 
     <main class="layout">
       <section class="panel controls">
-        <div class="control-grid">
-          <label>検索<input id="q" type="search" placeholder="講座名・講師・番号"></label>
+        <div class="control-grid compact-grid">
+          <label>講座名検索<input id="q" type="search" placeholder="講座名・科目"></label>
           <label>科目<select id="subject"><option value="">すべて</option></select></label>
-          <label>校舎<select id="campus"><option value="">すべて</option></select></label>
           <label>区分<select id="section"><option value="">すべて</option></select></label>
         </div>
-        <div class="settings-box" aria-label="スケジュール作成設定">
+
+        <div class="settings-box" aria-label="共通設定">
           <div class="settings-head">
             <div>
-              <h2>スケジュール作成設定</h2>
-              <p>検索条件とは分離した、日程自動作成用の固定設定です。講座一覧の絞り込みには使わず、候補から日程を組むときの評価に一貫して反映します。</p>
+              <h2>共通設定</h2>
+              <p>候補追加時には使わず、自動作成時にだけ反映します。講座名を選ぶ段階では、校舎・組・講師を固定しません。</p>
             </div>
           </div>
-          <label class="teacher-setting">優先する先生
-            <select id="preferredTeachers" multiple size="6" aria-label="優先する先生を複数選択"></select>
-            <small class="field-help">複数選択できます。選択内容はブラウザに保存され、検索や絞り込みを変えても維持されます。</small>
-          </label>
-          <div id="preferredTeacherSummary" class="teacher-summary empty">優先講師は未設定です。</div>
-          <div class="settings-actions">
-            <button id="clearTeachersBtn" type="button">優先講師を解除</button>
+
+          <div class="settings-grid">
+            <div class="setting-card">優先する先生
+              <details id="teacherDropdown" class="dropdown-picker">
+                <summary id="teacherPickerLabel">先生を選択</summary>
+                <div id="teacherCheckboxList" class="check-list" role="group" aria-label="優先する先生を複数選択"></div>
+              </details>
+              <small class="field-help">複数選択できます。選んだ先生の講座が候補内にある場合、自動作成時に優先します。</small>
+              <div id="preferredTeacherSummary" class="chip-summary empty">優先講師は未設定です。</div>
+            </div>
+
+            <div class="setting-card">優先する校舎
+              <details id="campusDropdown" class="dropdown-picker">
+                <summary id="campusPickerLabel">校舎を選択</summary>
+                <div id="campusCheckboxList" class="check-list compact" role="group" aria-label="優先する校舎を複数選択"></div>
+              </details>
+              <small class="field-help">未選択の場合は校舎を強く優先しません。2限と3限の間のみ校舎移動可能として判定します。</small>
+              <div id="preferredCampusSummary" class="chip-summary empty">優先校舎は未設定です。</div>
+            </div>
+          </div>
+
+          <div class="options-row">
+            <label class="check"><input id="preferVideo" type="checkbox"> 映像講座も積極的に使う</label>
+            <label class="check"><input id="compact" type="checkbox" checked> 日程を圧縮</label>
+            <button id="clearCommonSettingsBtn" type="button">共通設定をリセット</button>
           </div>
         </div>
 
-        <div class="options-row">
-          <label class="check"><input id="preferUmeda" type="checkbox" checked> 梅田を優先</label>
-          <label class="check"><input id="preferVideo" type="checkbox"> 映像も積極的に使う</label>
-          <label class="check"><input id="compact" type="checkbox" checked> 日程を圧縮</label>
-        </div>
         <div class="action-row">
-          <button id="autoBtn" class="primary">選択講座から自動作成</button>
-          <button id="clearBtn">クリア</button>
+          <button id="autoBtn" class="primary">講座名候補から自動作成</button>
+          <button id="clearBtn">候補と予定をクリア</button>
           <button id="exportBtn">計画をCSV出力</button>
         </div>
       </section>
@@ -60,22 +73,22 @@
       <section class="split">
         <div class="panel list-panel">
           <div class="panel-head">
-            <h2>講座一覧</h2>
+            <h2>講座名一覧</h2>
             <span id="visibleCount"></span>
           </div>
-          <p class="hint">特訓・講習、その中の教科ごとに折りたたんで表示します。同じ講座名の候補から、自動作成時に最適な組・校舎・講師を選びます。優先講師は上部の設定として固定され、検索条件にはなりません。</p>
-          <div id="candidateBox" class="candidate-box empty">「候補」を押した講座がここに入ります。自動作成では、同じ講座名の複数候補から最適な組・校舎・講師を選びます。</div>
+          <p class="hint">ここでは講座名だけを候補に入れます。同じ講座名に複数の校舎・組・講師がある場合、自動作成時に最適なものを選びます。</p>
+          <div id="candidateBox" class="candidate-box empty">「候補に入れる」を押した講座名がここに入ります。</div>
           <div id="courseList" class="course-list"></div>
         </div>
 
         <aside class="panel plan-panel">
           <div class="panel-head">
-            <h2>作成した予定</h2>
+            <h2>自動作成した予定</h2>
             <span id="planCount"></span>
           </div>
           <div id="warnings" class="warnings"></div>
           <div id="summary" class="summary"></div>
-          <div id="planList" class="plan-list empty">まだ講座が追加されていません。</div>
+          <div id="planList" class="plan-list empty">まだ予定がありません。</div>
         </aside>
       </section>
 
@@ -84,7 +97,7 @@
           <h2>タイムライン</h2>
           <span>期・日程別</span>
         </div>
-        <div id="timeline" class="timeline empty">予定を追加すると、日程ごとに整理して表示されます。</div>
+        <div id="timeline" class="timeline empty">予定を作成すると、日程ごとに整理して表示されます。</div>
       </section>
     </main>
   </div>
