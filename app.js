@@ -79,17 +79,68 @@ function filteredCourses(){
   const q=state.q.trim().toLowerCase();
   return courses.filter(c => (!q || [c.course,c.teacher,c.code,c.schedule,c.subject,c.campus].join(' ').toLowerCase().includes(q)) && (!state.subject||c.subject===state.subject) && (!state.campus||c.campus===state.campus) && (!state.section||c.section===state.section));
 }
+function sectionBucket(section){
+  if(String(section).includes('特訓')) return '夏期特訓';
+  if(String(section).includes('講習')) return '夏期講習';
+  return section || 'その他';
+}
+function bucketOrder(name){
+  if(name==='夏期特訓') return 1;
+  if(name==='夏期講習') return 2;
+  return 9;
+}
+function renderCourseCard(c){
+  const isWanted=wanted.has(c.course);
+  const card=document.createElement('article'); card.className='course-card'+(isWanted?' wanted':'');
+  card.innerHTML=`<div class="course-main"><div><div class="course-title">${esc(c.course)}</div><div class="meta"><span class="pill">${esc(c.subject)}</span><span class="pill gray">${esc(c.section)}</span><span class="pill gray">${esc(c.campus)} ${esc(c.group||'')}</span><span class="pill gray">${esc(c.schedule)}</span><span class="pill gray">${esc(c.code)}</span><span class="pill gray">${esc(c.teacher)}</span></div></div><div class="course-actions"><button class="small-btn want">${isWanted?'候補解除':'候補'}</button><button class="small-btn add">追加</button></div></div>`;
+  card.querySelector('.want').addEventListener('click',()=>{wanted.has(c.course)?wanted.delete(c.course):wanted.add(c.course);renderCourses();renderCandidateBox();});
+  card.querySelector('.add').addEventListener('click',()=>{if(!plan.some(x=>x.id===c.id)) plan.push(c);renderPlan();renderTimeline();});
+  return card;
+}
 function renderCourses(){
   const list=$('courseList'); list.innerHTML='';
   const arr=filteredCourses(); $('visibleCount').textContent=`${arr.length}件`;
+  if(!arr.length){
+    list.innerHTML='<div class="empty-message">条件に一致する講座がありません。</div>';
+    return;
+  }
+
+  const grouped=new Map();
   arr.forEach(c=>{
-    const isWanted=wanted.has(c.course);
-    const card=document.createElement('article'); card.className='course-card'+(isWanted?' wanted':'');
-    card.innerHTML=`<div class="course-main"><div><div class="course-title">${esc(c.course)}</div><div class="meta"><span class="pill">${esc(c.subject)}</span><span class="pill gray">${esc(c.section)}</span><span class="pill gray">${esc(c.campus)} ${esc(c.group||'')}</span><span class="pill gray">${esc(c.schedule)}</span><span class="pill gray">${esc(c.code)}</span><span class="pill gray">${esc(c.teacher)}</span></div></div><div class="course-actions"><button class="small-btn want">${isWanted?'候補解除':'候補'}</button><button class="small-btn add">追加</button></div></div>`;
-    card.querySelector('.want').addEventListener('click',()=>{wanted.has(c.course)?wanted.delete(c.course):wanted.add(c.course);renderCourses();renderCandidateBox();});
-    card.querySelector('.add').addEventListener('click',()=>{if(!plan.some(x=>x.id===c.id)) plan.push(c);renderPlan();renderTimeline();});
-    list.appendChild(card);
+    const bucket=sectionBucket(c.section);
+    if(!grouped.has(bucket)) grouped.set(bucket, new Map());
+    const subjects=grouped.get(bucket);
+    if(!subjects.has(c.subject || '未分類')) subjects.set(c.subject || '未分類', []);
+    subjects.get(c.subject || '未分類').push(c);
   });
+
+  [...grouped.entries()]
+    .sort((a,b)=>bucketOrder(a[0])-bucketOrder(b[0]) || a[0].localeCompare(b[0],'ja'))
+    .forEach(([bucket, subjectMap], bucketIndex)=>{
+      const total=[...subjectMap.values()].reduce((n,v)=>n+v.length,0);
+      const bucketDetails=document.createElement('details');
+      bucketDetails.className='accordion bucket-accordion';
+      bucketDetails.open=true;
+      bucketDetails.innerHTML=`<summary><span class="summary-title">${esc(bucket)}</span><span class="summary-count">${total}件</span></summary>`;
+
+      const subjectWrap=document.createElement('div');
+      subjectWrap.className='subject-wrap';
+      [...subjectMap.entries()]
+        .sort((a,b)=>a[0].localeCompare(b[0],'ja'))
+        .forEach(([subject, items])=>{
+          const details=document.createElement('details');
+          details.className='accordion subject-accordion';
+          details.open = arr.length <= 80 || bucketIndex === 0;
+          details.innerHTML=`<summary><span class="summary-title">${esc(subject)}</span><span class="summary-count">${items.length}件</span></summary>`;
+          const inner=document.createElement('div');
+          inner.className='subject-course-list';
+          items.forEach(c=>inner.appendChild(renderCourseCard(c)));
+          details.appendChild(inner);
+          subjectWrap.appendChild(details);
+        });
+      bucketDetails.appendChild(subjectWrap);
+      list.appendChild(bucketDetails);
+    });
 }
 function realSlots(c){return c.slots.filter(s=>s.key!=='VIDEO');}
 function slotOverlaps(a,b){
