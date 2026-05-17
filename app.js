@@ -9,10 +9,11 @@ function optFill(id, values){const el=$(id); values.forEach(v=>{const o=document
 optFill('subject', uniq(courses.map(c=>c.subject)));
 optFill('campus', uniq(courses.map(c=>c.campus)));
 optFill('section', uniq(courses.map(c=>c.section)));
+optFill('preferredTeachers', uniq(courses.map(c=>c.teacher)));
 $('totalCount').textContent = courses.length;
 
 ['q','subject','campus','section'].forEach(id=>$(id).addEventListener('input', e=>{state[id]=e.target.value; renderCourses();}));
-$('preferredTeachers').addEventListener('input',()=>{if(plan.length) renderPlan();});
+$('preferredTeachers').addEventListener('change',()=>{if(plan.length) renderPlan();});
 $('clearBtn').addEventListener('click',()=>{wanted.clear();plan=[];renderAll();});
 $('autoBtn').addEventListener('click', autoSchedule);
 $('exportBtn').addEventListener('click', exportCsv);
@@ -60,7 +61,9 @@ function parseSlots(schedule, section, campus){
   return slots;
 }
 function preferredTeacherTerms(){
-  return normalizeDigits($('preferredTeachers').value || '').split(/[、,\s]+/).map(x=>x.trim()).filter(Boolean);
+  const el = $('preferredTeachers');
+  if(!el) return [];
+  return [...el.selectedOptions].map(o=>normalizeDigits(o.value || o.textContent || '').trim()).filter(Boolean);
 }
 function teacherPriority(c){
   const terms=preferredTeacherTerms();
