@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>梅田校 夏期講座 スケジューラー</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">2026年度 梅田校</p>
+        <h1>夏期講座スケジューラー</h1>
+        <p class="lead">PDF内の夏期特訓・夏期講習を検索し、受講候補を選ぶだけで、衝突しにくい組み合わせを自動作成します。</p>
+      </div>
+      <div class="stat-card">
+        <span id="totalCount">0</span>
+        <small>講座データ</small>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel controls">
+        <div class="control-grid">
+          <label>検索<input id="q" type="search" placeholder="講座名・講師・番号"></label>
+          <label>科目<select id="subject"><option value="">すべて</option></select></label>
+          <label>校舎<select id="campus"><option value="">すべて</option></select></label>
+          <label>区分<select id="section"><option value="">すべて</option></select></label>
+        </div>
+        <div class="options-row">
+          <label class="check"><input id="preferUmeda" type="checkbox" checked> 梅田を優先</label>
+          <label class="check"><input id="preferVideo" type="checkbox"> 映像も積極的に使う</label>
+          <label class="check"><input id="compact" type="checkbox" checked> 日程を圧縮</label>
+        </div>
+        <div class="action-row">
+          <button id="autoBtn" class="primary">選択講座から自動作成</button>
+          <button id="clearBtn">クリア</button>
+          <button id="exportBtn">計画をCSV出力</button>
+        </div>
+      </section>
+
+      <section class="split">
+        <div class="panel list-panel">
+          <div class="panel-head">
+            <h2>講座一覧</h2>
+            <span id="visibleCount"></span>
+          </div>
+          <p class="hint">同じ講座名の候補から、自動作成時に最適な組・校舎を選びます。個別に「追加」も可能です。</p>
+          <div id="courseList" class="course-list"></div>
+        </div>
+
+        <aside class="panel plan-panel">
+          <div class="panel-head">
+            <h2>作成した予定</h2>
+            <span id="planCount"></span>
+          </div>
+          <div id="warnings" class="warnings"></div>
+          <div id="summary" class="summary"></div>
+          <div id="planList" class="plan-list empty">まだ講座が追加されていません。</div>
+        </aside>
+      </section>
+
+      <section class="panel timeline-panel">
+        <div class="panel-head">
+          <h2>タイムライン</h2>
+          <span>期・日程別</span>
+        </div>
+        <div id="timeline" class="timeline empty">予定を追加すると、日程ごとに整理して表示されます。</div>
+      </section>
+    </main>
+  </div>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
